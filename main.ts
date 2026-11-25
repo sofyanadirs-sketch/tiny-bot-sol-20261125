@@ -57,11 +57,18 @@ interface Series {
 const series = new Map<string, Series>();
 
 /** Fold one bar into its symbol's EMA. Seeded on its first close, like a
-    plain EMA that starts at the first value it sees. */
+    plain EMA that starts at the first value it sees. A bad bar is skipped,
+    not folded in: a non-finite or non-positive close (an empty/missing bar,
+    or a malformed price that Number() turns into NaN) would otherwise
+    poison the EMA — drag it toward 0 and fake a dip, or turn it NaN and
+    silently disable the symbol for the rest of the run, since every later
+    dip comparison against NaN is false. Skipped bars do not count toward
+    the warm-up history either, so the EMA is built from good closes only. */
 function push(bar: Bar): void {
   let s = series.get(bar.symbol);
   if (s === undefined) series.set(bar.symbol, (s = { ema: null, bars: 0 }));
   const c = Number(bar.c);
+  if (!Number.isFinite(c) || c <= 0) return;
   s.ema = s.ema === null ? c : s.ema + (c - s.ema) * EMA_K;
   s.bars += 1;
 }
